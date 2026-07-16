@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Absensi NFC Mobile - SMK IBU</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; text-align: center; background-color: #f0f2f5; margin: 0; padding: 20px; }
+    .container { background: white; max-width: 400px; margin: 30px auto; padding: 30px 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    h2 { color: #1a73e8; margin-bottom: 5px; }
+    .sub-title { color: #5f6368; font-size: 14px; margin-bottom: 25px; }
+    
+    .btn-group { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 25px; }
+    .mode-btn { flex: 1; padding: 15px 5px; font-size: 14px; font-weight: bold; border: 2px solid #dadce0; border-radius: 8px; background-color: #fafafa; cursor: pointer; transition: all 0.2s; color: #5f6368; }
+    .mode-btn.active-masuk { background-color: #e6f4ea; color: #137333; border-color: #137333; }
+    .mode-btn.active-pulang { background-color: #e8f0fe; color: #1a73e8; border-color: #1a73e8; }
+    
+    .scan-btn { width: 100%; padding: 16px; font-size: 16px; font-weight: bold; background-color: #1a73e8; color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(26,115,232,0.3); transition: background 0.2s; }
+    .scan-btn:hover { background-color: #155cb8; }
+    .scan-btn:disabled { background-color: #bdc3c7; box-shadow: none; cursor: not-allowed; }
+
+    .status-box { margin-top: 25px; padding: 15px; border-radius: 8px; font-size: 15px; font-weight: bold; display: none; line-height: 1.5; }
+    .success-masuk { background-color: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+    .success-pulang { background-color: #e8f0fe; color: #1a73e8; border: 1px solid #d2e3fc; }
+    .success-terlambat { background-color: #fef7e0; color: #b06000; border: 1px solid #feebd0; }
+    .warning { background-color: #fef7e0; color: #b06000; border: 1px solid #feebd0; }
+    .error { background-color: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; }
+    .loading { background-color: #f1f3f4; color: #3c4043; border: 1px dashed #9aa0a6; }
+    .footer-note { font-size: 11px; color: #9aa0a6; margin-top: 25px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>ABSENSI RFID MOBILE</h2>
+  <div class="sub-title">SMK IBU - Mode Pemindai NFC Top-Level</div>
+  
+  <div class="btn-group">
+    <button id="btn-masuk" class="mode-btn" onclick="pilihMode('Masuk')">🛫 MASUK</button>
+    <button id="btn-pulang" class="mode-btn" onclick="pilihMode('Pulang')">🛬 PULANG</button>
+  </div>
+  
+  <button id="start-btn" class="scan-btn" onclick="aktifkanSensorNFCTopLevel()">📳 AKTIFKAN SENSOR NFC</button>
+  
+  <div id="status" class="status-box"></div>
+  
+  <div class="footer-note">
+    ℹ️ Fitur NFC wajib aktif di sistem Android Anda.<br>
+    Buka tautan web ini menggunakan Google Chrome.
+  </div>
+</div>
+
+<script>
+  // URL Web App Anda sudah tertanam otomatis dan valid di bawah ini:
+  const GOOGLE_SCRIPT_API = "https://script.google.com/macros/s/AKfycbzduXeTtqmXJfnFB7f8_XcA-MlUc3i_1AtsnZH-O5zomlPGCH-5FeNyIuGKwRg8Z-GI/exec";
+  
+  const statusBox = document.getElementById('status');
+  const btnMasuk = document.getElementById('btn-masuk');
+  const btnPulang = document.getElementById('btn-pulang');
+  const startBtn = document.getElementById('start-btn');
+  
+  let modeTerpilih = "Masuk";
+  let nfcAktif = false;
+
+  function pilihMode(mode) {
+    modeTerpilih = mode;
+    if (mode === "Masuk") {
+      btnMasuk.className = "mode-btn active-masuk"; btnPulang.className = "mode-btn";
+    } else {
+      btnMasuk.className = "mode-btn"; btnPulang.className = "mode-btn active-pulang";
+    }
+  }
+
+  function aturModeOtomatisSesuaiJam() {
+    const waktuSekarang = new Date();
+    const totalMenitSekarang = (waktuSekarang.getHours() * 60) + waktuSekarang.getMinutes();
+    if (totalMenitSekarang >= (13 * 60) + 15) { pilihMode('Pulang'); } else { pilihMode('Masuk'); }
+  }
+
+  window.onload = function() { aturModeOtomatisSesuaiJam(); };
+
+  function tampilkanStatus(teks, tipe) {
+    statusBox.innerText = teks; statusBox.className = 'status-box ' + tipe; statusBox.style.display = 'block';
+  }
+
+  async function aktifkanSensorNFCTopLevel() {
+    if ('NDEFReader' in window) {
+      try {
+        const ndef = new NDEFReader();
+        await ndef.scan();
+        
+        nfcAktif = true;
+        startBtn.disabled = true;
+        startBtn.innerText = "📡 SENSOR NFC AKTIF";
+        tampilkanStatus("NFC Siap! Tempelkan kartu ke bagian belakang HP Anda...", "loading");
+
+        ndef.addEventListener("readingerror", () => {
+          tampilkanStatus("❌ Gagal membaca kartu. Tempelkan ulang dengan pas.", "error");
+        });
+
+        ndef.addEventListener("reading", ({ serialNumber }) => {
+          let uidBersih = serialNumber.replace(/:/g, "").toUpperCase();
+          prosesKirimKeGoogleSheets(uidBersih, modeTerpilih);
+        });
+
+      } catch (error) {
+        tampilkanStatus("❌ Gagal aktifkan sensor: " + error.message, "error");
+      }
+    } else {
+      tampilkanStatus("❌ Browser/HP tidak mendukung Web NFC. Wajib gunakan Google Chrome di Android.", "error");
+    }
+  }
+
+  function prosesKirimKeGoogleSheets(uid, tipeAbsen) {
+    tampilkanStatus("⏳ Memproses data kartu ke database...", "loading");
+    
+    fetch(`${GOOGLE_SCRIPT_API}?action=scan_nfc&uid=${uid}&tipe=${tipeAbsen}`)
+      .then(res => res.json())
+      .then(response => {
+        if (response && response.status === "success") {
+          if (response.tipe === "Masuk") {
+            if (response.terlambat === "ya") {
+              tampilkanStatus("⚠️ " + response.nama + "\nAbsen MASUK Berhasil (Status: TERLAMBAT).", "success-terlambat");
+            } else {
+              tampilkanStatus("✅ " + response.nama + "\nAbsen MASUK Berhasil dicatat.", "success-masuk");
+            }
+          } else {
+            tampilkanStatus("👋 " + response.nama + "\nAbsen PULANG Berhasil.", "success-pulang");
+          }
+        } else if (response && response.status === "already") {
+          tampilkanStatus("⚠️ " + response.message, "warning"); 
+        } else if (response && response.status === "unknown") {
+          tampilkanStatus("❌ " + response.message, "error");
+        }
+        setTimeout(() => {
+          if(nfcAktif) tampilkanStatus("NFC Aktif! Tempelkan kartu RFID berikutnya...", "loading");
+        }, 3500);
+      })
+      .catch(error => {
+        tampilkanStatus("❌ Gangguan Koneksi API: " + error.message, "error");
+      });
+  }
+</script>
+</body>
+</html>
